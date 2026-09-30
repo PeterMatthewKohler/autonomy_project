@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "name": "ROS2 Humble",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "/opt/ros/humble/include/**"
+      ],
+      "intelliSenseMode": "linux-gcc-x64",
+      "cppStandard": "c++17"
+    }
+  ],
+  "version": 4
+}
