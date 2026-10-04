@@ -1,0 +1,9 @@
+waypoint_node:
+  ros__parameters:
+    odom_frame: odom
+    base_frame: base_link
+    goal_distance: 1.0       # meters ahead at goal initialization
+    goal_tolerance: 0.15     # meters
+    heading_tolerance: 0.25  # radians
+    max_linear_speed: 0.3    # meters/second
+    max_angular_speed: 0.6   # radians/second
