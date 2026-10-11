@@ -85,13 +85,13 @@ class ControllerTest(unittest.TestCase):
         self.assertIsNone(self.process.poll(), 'Controller exited')
         return self.commands[-1]
 
-    def test_turns_clockwise_while_driving_and_stops_inside_tolerance(self):
+    def test_turns_clockwise_then_starts_driving_and_stops_inside_tolerance(self):
         self.assertTrue(self.goal(0, -1).success)
         self.pose(0, 0, 0)
         command = self.latest()
         self.assertLess(command.angular.z, 0)
         self.assertGreaterEqual(command.angular.z, -0.6)
-        self.assertGreater(command.linear.x, 0, 'Allow forward motion while turning')
+        self.assertEqual(command.linear.x, 0, 'Do not allow forward motion while turning')
         self.pose(0, 0, -math.pi / 2)
         command = self.latest()
         self.assertGreater(command.linear.x, 0)

@@ -143,11 +143,14 @@ void WaypointNode::controlLoop()
   } else {
     // The reference is zero remaining distance. Forward motion reduces that
     // measurement, so map the PID's negative output to positive forward speed.
-    cmd.linear.x = std::clamp(
-      -latPID.update(0.0, distanceError), 0.0, maxLinearSpeed_);
+    // Turn first, then drive forwards after rotating to within set threshold
     cmd.angular.z = std::clamp(
       rotPID.updateAngle(desiredHeading, *currYawRad_),
       -maxAngularSpeed_, maxAngularSpeed_);
+    if (std::abs(headingError) <= headingTolerance_) {
+      cmd.linear.x = std::clamp(
+        -latPID.update(0.0, distanceError), 0.0, maxLinearSpeed_);
+    }
   }
 
   RCLCPP_INFO_STREAM_THROTTLE(

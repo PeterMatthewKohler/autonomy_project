@@ -39,9 +39,7 @@ error, and the actual velocity commands after limiting, for example:
 Traversal: distance error=0.8 m, heading error=-12 deg, aligned=1, v=0.3 m/s, w=-12 deg/s
 ```
 
-`heading_tolerance` controls the displayed `aligned` flag; it does not gate
-motion. `goal_distance` is retained from the original skeleton; service-provided
-coordinates determine the goal.
+`heading_tolerance` used to align the vehicle with goal position first, then linear velocity is applied.
 
 ## Build and run
 

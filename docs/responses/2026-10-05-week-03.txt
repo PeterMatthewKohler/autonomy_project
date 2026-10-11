@@ -1,0 +1,11 @@
+A goal enters through the service call /goal_service. 
+Pose updates arrive through the odometry callback.
+The timer computes the state error both euclidean distance and heading, and also the control command output.
+Angle wrapping matters because heading is clipped from -pi to pi (-180 to 180). Numerically a current heading of 179 and a goal -178 would compute a raw error of -357 which would create a drastically different control signal than the wrapped error of +3.
+When the heading error exceeds the headingTolerance_ parameter input, the controller commands a 0 lateral velocity.
+Once aligned it commands a non-zero lateral velocity if our euclidean error is above the goalTolerance threshold.
+It declares success when the euclidean distance calculated is below the goalTolerance_ threshold.
+The automated test proves the yaw-first behavior by asserting a commanded linear x velocity output of exactly 0 during the initial clockwise turn.
+
+"What would the rover do differently if I removed the heading-tolerance branch?"
+It would start turning and driving forwards immediately regardless of heading error.
