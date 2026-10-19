@@ -12,7 +12,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
+find_package(nova_carter_interfaces REQUIRED)
 
 add_library(WaypointNode_lib STATIC
   src/WaypointNode_impl.cpp
@@ -29,17 +29,8 @@ ament_target_dependencies(WaypointNode_lib
   tf2
   tf2_ros
   tf2_geometry_msgs
+  nova_carter_interfaces
 )
-
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "srvs/Goal.srv"
-)
-# Custom message support
-rosidl_get_typesupport_target(goal_typesupport
-  ${PROJECT_NAME} rosidl_typesupport_cpp)
-target_link_libraries(WaypointNode_lib "${goal_typesupport}")
-
-ament_export_dependencies(rosidl_default_runtime)
 
 add_executable(WaypointNode_exe src/WaypointNode_main.cpp)
 target_link_libraries(WaypointNode_exe WaypointNode_lib)

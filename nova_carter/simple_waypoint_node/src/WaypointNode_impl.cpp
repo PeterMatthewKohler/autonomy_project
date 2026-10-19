@@ -50,7 +50,7 @@ void WaypointNode::initPubSubs()
 
 void WaypointNode::initServices()
 {
-  goalService_ = create_service<simple_waypoint_node::srv::Goal>(
+  goalService_ = create_service<nova_carter_interfaces::srv::Goal>(
     "goal_service",
     std::bind(
       &WaypointNode::initializeGoal, this,
@@ -86,15 +86,10 @@ void WaypointNode::odomCallback(nav_msgs::msg::Odometry::ConstSharedPtr msg)
 }
 
 void WaypointNode::initializeGoal(
-  std::shared_ptr<simple_waypoint_node::srv::Goal::Request> request,
-  std::shared_ptr<simple_waypoint_node::srv::Goal::Response> response)
+  std::shared_ptr<nova_carter_interfaces::srv::Goal::Request> request,
+  std::shared_ptr<nova_carter_interfaces::srv::Goal::Response> response)
 {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (haveGoal_) {
-    response->success = false;
-    response->message = "Already working on a different goal. Please wait.";
-    return;
-  }
   if (!std::isfinite(request->x) || !std::isfinite(request->y)) {
     response->success = false;
     response->message = "Goal coordinates must be finite.";

@@ -49,7 +49,7 @@ at the repository root:
 ```bash
 cd ~/Development/personal/autonomy_project/nova_carter
 source /opt/ros/humble/setup.bash
-colcon build --packages-select simple_waypoint_node --symlink-install
+colcon build --packages-up-to simple_waypoint_node --symlink-install
 source install/local_setup.bash
 ros2 launch simple_waypoint_node waypoint_node_launch.py
 ```
@@ -59,12 +59,16 @@ If Isaac Sim publishes `/clock`, add `use_sim_time:=true`.
 Submit a goal from another shell with the same ROS environment:
 
 ```bash
-ros2 service call /goal_service simple_waypoint_node/srv/Goal "{x: 1.0, y: 0.5}"
+ros2 service call /goal_service nova_carter_interfaces/srv/Goal "{x: 1.0, y: 0.5}"
 ```
 
 Frame names, position tolerance, and velocity limits are in
 `params/waypoint_node_params.yaml`. Topic names can be remapped with ROS
 arguments.
+
+The service definition lives in the sibling `nova_carter_interfaces` package.
+The Week 4 mission skeleton lives in the sibling `simple_mission_node` package;
+both nodes depend on the same generated service type.
 
 ## Verification
 

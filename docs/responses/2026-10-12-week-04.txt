@@ -1,0 +1,14 @@
+“The mission node owns the planning step, where should the robot go?
+The controller owns the actuation commands.
+The mission sends a waypoint through the service call.
+It knows which waypoint is active using the currGoal_ optional variable.
+It advances when we reach the position within tolerance of the goal point or a timeout occurs or the controller stops trying to move the robot.
+A rejected request causes the mission node to retry using the service call, if that repeatedly fails it moves on to the next goal point.
+Waypoint coordinates and distance are expressed in meters.
+The mission stops permanently when we attempt all the hardcoded goal points in the mission node.”
+
+
+"Why is duplicating the goal-tolerance check acceptable for this learning stage, and what ROS interface would better represent 
+a long-running goal in a production system?”
+
+Because it's simple? An action server would be a much cleaner and better goal monitoring system in a production system.

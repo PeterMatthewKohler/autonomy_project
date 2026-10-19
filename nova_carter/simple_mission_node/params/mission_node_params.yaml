@@ -1,0 +1,5 @@
+mission_node:
+  ros__parameters:
+    odom_frame: odom
+    goal_tolerance: 0.1  # metres; keep consistent with the waypoint controller
+    command_timeout_s: 30.0

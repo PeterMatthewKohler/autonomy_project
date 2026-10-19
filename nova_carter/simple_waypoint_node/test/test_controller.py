@@ -12,8 +12,8 @@ import unittest
 from ament_index_python.packages import get_package_prefix
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from nova_carter_interfaces.srv import Goal
 import rclpy
-from simple_waypoint_node.srv import Goal
 
 
 class ControllerTest(unittest.TestCase):
@@ -107,7 +107,6 @@ class ControllerTest(unittest.TestCase):
         self.pose(0, 0, math.radians(358))
         self.assertTrue(self.goal(math.cos(math.radians(2)),
                                   math.sin(math.radians(2))).success)
-        self.assertFalse(self.goal(-10, -10).success, 'Active goal must not be replaced')
         self.pose(0, 0, math.radians(358), duration=1.3)
         command = self.latest()
         self.assertGreater(command.linear.x, 0)
@@ -116,6 +115,26 @@ class ControllerTest(unittest.TestCase):
         output = self.output.read_text()
         self.assertRegex(output, r'heading error=4(?:\.0*)? deg')
         self.assertRegex(output, r'distance error=1(?:\.0*)? m')
+
+    def test_replaces_active_goal_and_tracks_new_coordinates(self):
+        self.assertTrue(self.goal(1, 0).success)
+        self.pose(0, 0, 0)
+        self.assertGreater(self.latest().linear.x, 0)
+
+        self.assertTrue(self.goal(0, -1).success, 'Active goal replacement must be accepted')
+        self.pose(0, 0, 0)
+        command = self.latest()
+        self.assertEqual(command.linear.x, 0)
+        self.assertLess(command.angular.z, 0)
+
+        # Reaching the original goal must not complete the replacement goal.
+        self.pose(1, 0, -3 * math.pi / 4)
+        self.assertGreater(self.latest().linear.x, 0)
+
+        self.pose(0, -0.95, 0)
+        command = self.latest()
+        self.assertEqual(command.linear.x, 0)
+        self.assertEqual(command.angular.z, 0)
 
     def test_reaches_an_off_axis_goal_in_a_planar_simulation(self):
         x, y, yaw = 0.0, 0.0, math.radians(170)

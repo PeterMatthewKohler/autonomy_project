@@ -9,8 +9,8 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <nova_carter_interfaces/srv/goal.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <simple_waypoint_node/srv/goal.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -99,13 +99,13 @@ private:
   void initServices();
   void odomCallback(nav_msgs::msg::Odometry::ConstSharedPtr msg);
   void initializeGoal(
-    std::shared_ptr<simple_waypoint_node::srv::Goal::Request> request,
-    std::shared_ptr<simple_waypoint_node::srv::Goal::Response> response);
+    std::shared_ptr<nova_carter_interfaces::srv::Goal::Request> request,
+    std::shared_ptr<nova_carter_interfaces::srv::Goal::Response> response);
   void controlLoop();
 
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmdVelPub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub_;
-  rclcpp::Service<simple_waypoint_node::srv::Goal>::SharedPtr goalService_;
+  rclcpp::Service<nova_carter_interfaces::srv::Goal>::SharedPtr goalService_;
   rclcpp::TimerBase::SharedPtr controlTimer_;
 
   // Declare the buffer first so the listener is destroyed before it.
