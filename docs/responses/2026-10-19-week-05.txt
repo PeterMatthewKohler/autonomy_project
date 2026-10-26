@@ -1,0 +1,12 @@
+Prediction: 
+-Path stretch should be close to 1.0 but not 1.0 exactly
+-Controller behavior to move path stretch closer to 1.0 is how small the yaw error needs to be before the controller is allowed to start moving forwards
+-Turning in place does not add to planar path length.
+
+
+Interpret:
+-I assumed the path_stretch value would be larger than one, however the end result was actually smaller the one (~0.965)
+-I had an AI check my implementation and it affirmed it was done correctly, but noticed that the controller has a tolerance around the goal point instead of the exact point
+-This means that the actual traveled distance can end up less than the 'ideal' distance
+-A path stretch near 1.0 alone doesn't mean the controller is good, it could just be traveling a distance that ends up being very similar to the ideal distance, not necessarily traveling very close to each point
+-No, if the odometry was unreliable this metric would not be reliable.

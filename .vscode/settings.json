@@ -1,3 +1,9 @@
 {
-    "cmake.sourceDirectory": "/home/pkohler/Development/personal/autonomy_project/nova_carter/simple_odom_sub"
+    "cmake.sourceDirectory": "/home/pkohler/Development/personal/autonomy_project/nova_carter/simple_odom_sub",
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python.analysis.extraPaths": [
+        "/opt/ros/humble/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages"
+    ],
+    "python.analysis.useLibraryCodeForTypes": true
 }
