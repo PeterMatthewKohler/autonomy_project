@@ -54,7 +54,7 @@ def main():
     reader.set_filter(rosbag2_py.StorageFilter(topics=[ODOM_TOPIC]))
 
     # TODO (you): Set up your own analysis state and mission goal sequence here.
-    longitudinal_dist = 0.0
+    actual_planar_distance = 0.0
     sample_count = 0
     first_odom: tuple[float, float] | None = None
     odom_xy_prev: tuple[float, float] | None = None
@@ -72,14 +72,22 @@ def main():
         if odom_xy_prev is None:
             odom_xy_prev = (odom.pose.pose.position.x, odom.pose.pose.position.y)
             first_odom = odom_xy_prev
+            print(f"First (x, y): {odom_xy_prev}")
             continue
         # Every other loop
         odom_xy_curr = (odom.pose.pose.position.x, odom.pose.pose.position.y)
-        longitudinal_dist += math.sqrt(
+        actual_planar_distance += math.sqrt(
             (odom_xy_curr[0] - odom_xy_prev[0])**2 +
             (odom_xy_curr[1] - odom_xy_prev[1])**2
         )
         odom_xy_prev = odom_xy_curr
+    print(f"Final (x, y): {odom_xy_curr}")
+    # Calculate distance from final pose to goal (hardcoded to (0,0) currently)
+    final_goal = (0, 0)
+    final_error = math.sqrt(
+        (odom_xy_curr[0] - final_goal[0])**2 +
+        (odom_xy_curr[1] - final_goal[1])**2
+    )
 
     if sample_count == 0:
         raise SystemExit(f"No messages found on {ODOM_TOPIC}.")
@@ -101,10 +109,10 @@ def main():
         )
         prev_goal = goal
     # Implement path stretch and print your three metric results.
-    path_stretch = longitudinal_dist / ideal_dist
+    path_stretch = actual_planar_distance / ideal_dist
     # Print results
-    print(f"Longitudinal dist: {longitudinal_dist}m, ideal dist: {ideal_dist}m, path stretch: {path_stretch}.")
-
+    print(f"Actual planar dist: {actual_planar_distance}m, ideal dist: {ideal_dist}m, commanded-route distance ratio: {path_stretch}.")
+    print(f"Final goal error: {final_error}")
 
 if __name__ == "__main__":
     main()
