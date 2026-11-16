@@ -58,7 +58,7 @@ another clock, sorting, interpolation, frame transformation, or synchronization.
 Frame identifiers are printed for your reasoning; the script does not decide
 whether the recorded axes are comparable.
 
-Complete these three `TODO (you)` functions:
+The Week 7 calculation functions are implemented. Their responsibilities are:
 
 - `calculate_acceleration_magnitude(ax, ay, az)`: return one acceleration
   magnitude; stationary means are already wired to this function.
@@ -68,7 +68,6 @@ Complete these three `TODO (you)` functions:
 - `compare_yaw_rate_signs(imu_mean, odom_mean)`: report sign agreement after
   considering frames, axes, and what zero or near-zero values mean.
 
-Until these are implemented, the corresponding results explicitly say TODO.
 With valid bags, stationary gyro mean and population standard deviation and
 positive-yaw gyro mean are available immediately. The scaffold supplies the
 remaining summary statistics once your functions return values. These means
@@ -77,3 +76,45 @@ cover each entire recording, so you own whether it represents a steady interval.
 Keep predictions, gravity/bias reasoning, debugging hypotheses, and conclusions
 in your own response. The scope and AI-use boundary are in
 [the week 7 plan](../../docs/plans/2026-11-02-week-07.md).
+
+## Week 8 heading comparison scaffold
+
+Run with just the verified turn bag (the older two-bag command also works):
+
+```bash
+python3 tools/analysis/analyze_imu_odom.py <positive-yaw-bag>
+```
+
+The AI scaffold selects the shared header-timestamp interval, keeps IMU
+samples within it in recorded order, and finds odometry samples nearest
+its endpoints. Ties use the first sample in recorded order. Missing streams,
+nonpositive overlap, or fewer than two selected IMU samples produce an
+unavailable message. No samples are interpolated or sorted. The printed
+duration covers the shared interval; selected IMU timestamps and reference
+odometry timestamps are also printed so endpoint offsets remain visible.
+
+Your remaining code in `analyze_imu_odom.py`:
+
+- `propagate_imu_heading(samples, initial_heading)`: return final heading in
+  radians and the number of intervals integrated. The scaffold supplies the
+  selected IMU samples and starting reference yaw; you own propagation,
+  nonpositive timestamp handling, and wrapping.
+- `calculate_heading_error(imu_heading, odom_yaw)`: return your wrapped error
+  in radians. The scaffold formats radians and degrees.
+- `compare_yaw_rate_signs()`: replace the existing closeness shortcut with
+  the separate near-zero and sign checks required by the plan. Its existing
+  output remains the Week 7 behavior until you change it.
+
+The first two functions deliberately raise `NotImplementedError`. Until you
+implement them, the analyzer reports `TODO (you)` instead of inventing a
+heading estimate or final error. No IMU orientation field is used.
+
+You still own predictions, frame/z-axis verification, bag validation and
+recording, the hand-calculated check, debugging order, and your measured
+response and explanation. See the [Week 8 plan](../../docs/plans/2026-11-09-week-08.md).
+
+Run the ROS-independent scaffold checks with:
+
+```bash
+python3 -m unittest discover -s tools/analysis -p 'test_*.py'
+```

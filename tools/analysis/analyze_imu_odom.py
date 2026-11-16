@@ -30,6 +30,84 @@ class BagSamples:
     odom_frames: set[tuple[str, str]] = field(default_factory=set)
 
 
+@dataclass
+class HeadingInterval:
+    start_ns: int
+    end_ns: int
+    imu: list[ImuSample]
+    odom_start: OdomSample
+    odom_end: OdomSample
+
+
+def select_heading_interval(samples: BagSamples) -> HeadingInterval:
+    if not samples.imu or not samples.odom:
+        raise ValueError("Heading comparison requires both IMU and odometry samples.")
+    start = max(samples.imu[0].timestamp_ns, samples.odom[0].timestamp_ns)
+    end = min(samples.imu[-1].timestamp_ns, samples.odom[-1].timestamp_ns)
+    if end <= start:
+        raise ValueError("IMU and odometry have no positive shared time interval.")
+    imu = [sample for sample in samples.imu if start <= sample.timestamp_ns <= end]
+    if len(imu) < 2:
+        raise ValueError("Shared time interval contains fewer than two IMU samples.")
+    # Search the original odometry stream, including samples just outside overlap.
+    # Equal-distance ties select the first sample in recorded order.
+    return HeadingInterval(
+        start, end, imu,
+        min(samples.odom, key=lambda sample: abs(sample.timestamp_ns - start)),
+        min(samples.odom, key=lambda sample: abs(sample.timestamp_ns - end)),
+    )
+
+def wrap_angle(angle_rad: float) -> float:
+    return math.atan2(math.sin(angle_rad), math.cos(angle_rad))
+
+def propagate_imu_heading(
+    samples: list[ImuSample], initial_heading: float
+) -> tuple[float, int]:
+    """Return (final heading in radians, number of intervals integrated)."""
+    intervals = 0
+    imu_heading = initial_heading
+    prev_sample: ImuSample | None = None
+    for sample in samples:
+        if prev_sample is None:
+            prev_sample = sample
+            continue
+        dt = (sample.timestamp_ns - prev_sample.timestamp_ns) * 1e-9
+        if (dt > 0):
+            imu_heading = wrap_angle(imu_heading + sample.angular_velocity_z * dt)
+            intervals += 1
+        prev_sample = sample
+    return (imu_heading, intervals)
+
+
+def calculate_heading_error(imu_heading: float, odom_yaw: float) -> float:
+    """Return your wrapped final comparison error in radians."""
+    return wrap_angle(imu_heading - odom_yaw)
+
+
+def print_heading_comparison(samples: BagSamples) -> None:
+    print("\nWeek 8 heading comparison")
+    try:
+        interval = select_heading_interval(samples)
+    except ValueError as exc:
+        print(f"Heading comparison unavailable: {exc}")
+        return
+    print(f"Comparison duration: {(interval.end_ns - interval.start_ns) * 1e-9:.6f} s")
+    print(f"Starting odometry yaw: {interval.odom_start.yaw:.6f} rad")
+    print(f"Final odometry yaw: {interval.odom_end.yaw:.6f} rad")
+    print(f"Shared interval header timestamps: {interval.start_ns} to {interval.end_ns} ns")
+    print(f"Selected IMU timestamps: {interval.imu[0].timestamp_ns} to {interval.imu[-1].timestamp_ns} ns")
+    print(f"Reference odometry timestamps: {interval.odom_start.timestamp_ns} to {interval.odom_end.timestamp_ns} ns")
+    try:
+        heading, count = propagate_imu_heading(interval.imu, interval.odom_start.yaw)
+        print(f"Raw integrated IMU final heading: {heading:.6f} rad")
+        print(f"IMU intervals integrated: {count}")
+        error = calculate_heading_error(heading, interval.odom_end.yaw)
+    except NotImplementedError as exc:
+        print(f"Heading comparison incomplete: {exc}")
+        return
+    print(f"Wrapped final heading error: {error:.6f} rad ({math.degrees(error):.6f} deg)")
+
+
 def calculate_acceleration_magnitude(ax: float, ay: float, az: float) -> float:
     return math.sqrt(ax**2 + ay**2 + az**2)
 
@@ -42,10 +120,8 @@ def calculate_odom_yaw_rates(samples: list[OdomSample]) -> list[float]:
             prev_sample = odom_sample
             continue
 
-        delta_yaw = math.atan2(
-            math.sin(odom_sample.yaw - prev_sample.yaw),
-            math.cos(odom_sample.yaw - prev_sample.yaw)
-        )
+        delta_yaw = wrap_angle(odom_sample.yaw - prev_sample.yaw)
+
         dt = (odom_sample.timestamp_ns - prev_sample.timestamp_ns) * 1e-9
         prev_sample = odom_sample
         if dt > 0:
@@ -55,9 +131,13 @@ def calculate_odom_yaw_rates(samples: list[OdomSample]) -> list[float]:
 
 
 def compare_yaw_rate_signs(imu_mean: float, odom_mean: float) -> bool:
+    # and sign agreement, as specified in the plan.
     # Noise on a zero mean sample could say their signs don't agree, we don't really care about that
-    if (abs(imu_mean - odom_mean) < 0.01):
+    IMU_THRESHOLD = 0.01
+    if (abs(imu_mean) < IMU_THRESHOLD and abs(odom_mean) < IMU_THRESHOLD):
         return True
+    elif (abs(imu_mean) < IMU_THRESHOLD or abs(odom_mean) < IMU_THRESHOLD):
+        return False
 
     if (imu_mean > 0 and odom_mean > 0) or (imu_mean < 0 and odom_mean < 0):
         return True
@@ -184,7 +264,7 @@ def print_summary(label: str, samples: BagSamples, stationary: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stationary_bag", type=Path, help="Stationary bag directory")
+    parser.add_argument("stationary_bag", type=Path, nargs="?", help="Optional stationary bag directory")
     parser.add_argument("positive_yaw_bag", type=Path, help="Positive-yaw bag directory")
     parser.add_argument("--imu-topic", default="/chassis/imu")
     parser.add_argument("--odom-topic", default="/chassis/odom")
@@ -193,13 +273,13 @@ def main() -> None:
     )
     args = parser.parse_args()
     for bag in (args.stationary_bag, args.positive_yaw_bag):
-        if not bag.is_dir():
+        if bag is not None and not bag.is_dir():
             parser.error(f"Bag directory does not exist: {bag}")
     if args.imu_topic == args.odom_topic:
         parser.error("IMU and odometry topics must be different.")
 
     try:
-        stationary = read_bag(
+        stationary = None if args.stationary_bag is None else read_bag(
             args.stationary_bag, args.imu_topic, args.odom_topic, args.storage_id
         )
         positive_yaw = read_bag(
@@ -208,8 +288,10 @@ def main() -> None:
     except (RuntimeError, ValueError) as exc:
         parser.exit(1, f"Error: {exc}\n")
 
-    print_summary("Stationary", stationary, stationary=True)
+    if stationary is not None:
+        print_summary("Stationary", stationary, stationary=True)
     print_summary("Positive yaw", positive_yaw, stationary=False)
+    print_heading_comparison(positive_yaw)
 
 
 if __name__ == "__main__":

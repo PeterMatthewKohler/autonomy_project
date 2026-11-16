@@ -1,0 +1,33 @@
+1. Predict results and verify:
+- Approximate commanded turn rate(if we're using the previous week's bag) is ~0.3 rad/s
+- Turning CCW is a positive angular Z value on IMU and is in rad/s
+- Odometry pose uses `odom` frame
+- frames check out
+- tf2 is able to find transform from base_link->chassis_imu. Transform is as follows:
+- Translation: [-0.218, 0.024, 0.156]
+- Rotation: in Quaternion (xyzw) [0.000, 0.000, 0.000, 1.000]
+- Rotation: in RPY (radian) [0.000, -0.000, 0.000]
+- Rotation: in RPY (degree) [0.000, -0.000, 0.000]
+- Matrix:
+  1.000  0.000  0.000 -0.218
+  0.000  1.000  0.000  0.024
+  0.000  0.000  1.000  0.156
+  0.000  0.000  0.000  1.000
+No rotation, so orientation is Z pointing up, observed IMU output of rotation rotating agrees with this.
+
+4. 
+Did the integrated heading rotate in the expected direction and by roughly the expected amount?
+- The integrated heading result matched the odometry output with a small difference, so this is an expected result
+What was the final wrapped error in radians and degrees?
+-Final wrapped error was -0.011309 rad (-0.647973 deg)
+Is the error plausibly explained by the stationary bias measured last week, endpoint timing, transient motion, frame alignment, or some combination?
+- It could be some combination of those listed things, it also could be the simple fact we're performing a numerical integration on samples that are being recorded at a fixed rate.
+Why does integrating a rate convert a constant bias into error that grows with time?
+- Because you're missing out on the information inbetween the samples
+Why did you anchor the initial IMU heading to odometry?
+-The IMU itself does not measure orientation, so you need a starting point from which to do the numerical integration to compare with odometry.
+Why is this propagation step useful even though it is worse than simply reading odometry in this simulation?
+-Odometry is not always available, in certain scenarios (GPS denied, etc) being able to perform state estimation is crucial. Propagation like this is one of the fundamental building blocks of state estimation
+Which measurement would provide an observation/correction if this later became a real estimator?
+-Never built something like this before but, a LIDAR map where we measure key points and then find the rotation that aligns the old key points onto the new ones(SLAM)
+-Also could do something simpler like wheel rotation since we know the kinematic model of the nova carter. Wheel slippage would affect our accuracy however.
