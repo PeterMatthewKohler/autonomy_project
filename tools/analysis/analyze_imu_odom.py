@@ -84,6 +84,159 @@ def calculate_heading_error(imu_heading: float, odom_yaw: float) -> float:
     return wrap_angle(imu_heading - odom_yaw)
 
 
+@dataclass
+class MatchedHeadingSample:
+    imu: ImuSample
+    observation: OdomSample | None
+    observation_age_s: float | None
+
+
+@dataclass
+class CorrectedHeadingResult:
+    final_heading: float
+    accepted_observations: int
+    stale_observations: int
+    innovations: list[float]
+
+
+def match_heading_observations(
+    imu: list[ImuSample], odom: list[OdomSample]
+) -> list[MatchedHeadingSample]:
+    """Offer each latest causal observation once; leave age acceptance to you.
+
+    Older observations superseded between IMU samples are not offered. Equal
+    odometry timestamps are treated as one observation (last recorded wins).
+    Duplicate/backward IMU times cannot offer an observation a second time.
+    """
+    if any(b.timestamp_ns < a.timestamp_ns for a, b in zip(odom, odom[1:])):
+        raise ValueError("Odometry header timestamps decrease; inspect clock ordering.")
+    matches = []
+    index = 0
+    last_offered_stamp = None
+    for sample in imu:
+        latest = None
+        while index < len(odom) and odom[index].timestamp_ns <= sample.timestamp_ns:
+            latest = odom[index]
+            index += 1
+        if latest is not None and latest.timestamp_ns == last_offered_stamp:
+            latest = None
+        age = None
+        if latest is not None:
+            last_offered_stamp = latest.timestamp_ns
+            age = (sample.timestamp_ns - latest.timestamp_ns) * 1e-9
+        matches.append(MatchedHeadingSample(sample, latest, age))
+    return matches
+
+
+def correct_heading(
+    predicted_heading: float, observed_yaw: float, correction_gain: float
+) -> tuple[float, float]:
+    """Return (corrected heading, wrapped innovation), both in radians."""
+    innovation = wrap_angle(observed_yaw - predicted_heading)
+    corrected_heading = predicted_heading + correction_gain * innovation
+    return wrap_angle(corrected_heading), innovation
+
+def estimate_corrected_heading(
+    matches: list[MatchedHeadingSample], initial_heading: float,
+    correction_gain: float, max_observation_age_s: float,
+) -> CorrectedHeadingResult:
+    """Run your prediction/correction loop on the matched stream."""
+    accepted = 0
+    rejected = 0
+    innovations = []
+
+
+    corrected_heading = initial_heading
+    prev_match : MatchedHeadingSample | None = None
+    for match in matches:
+        if prev_match is None:
+            prev_match = match
+            continue
+        # Propagate raw heading forward via IMU sample
+        dt_imu_s = (match.imu.timestamp_ns - prev_match.imu.timestamp_ns) * 1e-9
+        if (dt_imu_s <= 0):
+            prev_match = match
+            continue
+
+        gyro_update = dt_imu_s * match.imu.angular_velocity_z
+        corrected_heading = wrap_angle(
+            corrected_heading + gyro_update
+        )
+        # If we have an odometry sample, apply a correction
+        if (match.observation is not None and
+            match.observation_age_s is not None):
+            if (match.observation_age_s <= max_observation_age_s):
+                corrected_heading, wrapped_inno = correct_heading(
+                    corrected_heading,
+                    match.observation.yaw,
+                    correction_gain
+                )
+                accepted += 1
+                innovations.append(wrapped_inno)
+            else:
+                rejected += 1
+        # Advance
+        prev_match = match
+    return CorrectedHeadingResult(
+        corrected_heading,
+        accepted,
+        rejected,
+        innovations
+    )
+
+def print_topic_periods(label: str, samples: list) -> None:
+    differences = [
+        (b.timestamp_ns - a.timestamp_ns) * 1e-9
+        for a, b in zip(samples, samples[1:])
+    ]
+    positive = [dt for dt in differences if dt > 0]
+    print(f"{label} nonpositive timestamp intervals: {sum(dt <= 0 for dt in differences)}")
+    if positive:
+        print(f"{label} header period min/mean/max: "
+              f"{min(positive):.6f}/{fmean(positive):.6f}/{max(positive):.6f} s")
+    else:
+        print(f"{label} header period: unavailable (no positive intervals)")
+
+
+def print_corrected_comparison(
+    samples: BagSamples, correction_gain: float, max_observation_age_s: float | None
+) -> None:
+    print("\nWeek 9 prediction-correction scaffold")
+    print(f"Correction gain: {correction_gain:.6f}")
+    print_topic_periods("IMU", samples.imu)
+    print_topic_periods("Odometry", samples.odom)
+    if (max_observation_age_s is None or
+        not math.isfinite(max_observation_age_s) or
+        max_observation_age_s <= 0):
+        print(f"Observation-age limit: {max_observation_age_s}, must be finite and positive")
+        return
+    print(f"Observation-age limit: {max_observation_age_s:.6f} s")
+    try:
+        interval = select_heading_interval(samples)
+        matches = match_heading_observations(interval.imu, samples.odom)
+        raw, _ = propagate_imu_heading(interval.imu, interval.odom_start.yaw)
+        print(f"Comparison duration: {(interval.end_ns - interval.start_ns) * 1e-9:.6f} s")
+        print(f"Reference final odometry yaw: {interval.odom_end.yaw:.6f} rad")
+        print(f"Raw final heading: {raw:.6f} rad")
+        raw_error = calculate_heading_error(raw, interval.odom_end.yaw)
+        print(f"Raw final error: {raw_error:.6f} rad ({math.degrees(raw_error):.6f} deg)")
+        result = estimate_corrected_heading(
+            matches, interval.odom_start.yaw, correction_gain, max_observation_age_s
+        )
+    except (ValueError, NotImplementedError) as exc:
+        print(f"Corrected comparison unavailable: {exc}")
+        return
+    print(f"Accepted observations: {result.accepted_observations}")
+    print(f"Stale observations: {result.stale_observations}")
+    if result.innovations:
+        print(f"Mean absolute wrapped innovation: {fmean(abs(x) for x in result.innovations):.6f} rad")
+    else:
+        print("Mean absolute wrapped innovation: unavailable (no accepted observations)")
+    print(f"Corrected final heading: {result.final_heading:.6f} rad")
+    error = calculate_heading_error(result.final_heading, interval.odom_end.yaw)
+    print(f"Corrected final error: {error:.6f} rad ({math.degrees(error):.6f} deg)")
+
+
 def print_heading_comparison(samples: BagSamples) -> None:
     print("\nWeek 8 heading comparison")
     try:
@@ -268,10 +421,19 @@ def main() -> None:
     parser.add_argument("positive_yaw_bag", type=Path, help="Positive-yaw bag directory")
     parser.add_argument("--imu-topic", default="/chassis/imu")
     parser.add_argument("--odom-topic", default="/chassis/odom")
+    parser.add_argument("--correction-gain", type=float, default=0.05)
+    parser.add_argument("--max-observation-age-s", type=float, default=None,
+                        help="Your chosen maximum observation age in seconds")
     parser.add_argument(
         "--storage-id", default="", help="Storage plugin; default: detect from metadata"
     )
     args = parser.parse_args()
+    if not math.isfinite(args.correction_gain) or not 0 <= args.correction_gain <= 1:
+        parser.error("Correction gain must be finite and between 0 and 1.")
+    if args.max_observation_age_s is not None and (
+        not math.isfinite(args.max_observation_age_s) or args.max_observation_age_s <= 0
+    ):
+        parser.error("Observation-age limit must be finite and positive.")
     for bag in (args.stationary_bag, args.positive_yaw_bag):
         if bag is not None and not bag.is_dir():
             parser.error(f"Bag directory does not exist: {bag}")
@@ -292,6 +454,7 @@ def main() -> None:
         print_summary("Stationary", stationary, stationary=True)
     print_summary("Positive yaw", positive_yaw, stationary=False)
     print_heading_comparison(positive_yaw)
+    print_corrected_comparison(positive_yaw, args.correction_gain, args.max_observation_age_s)
 
 
 if __name__ == "__main__":
